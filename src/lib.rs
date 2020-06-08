@@ -4,35 +4,48 @@ use std::collections::HashMap;
 
 pub struct CLParser<'a> {
     pub args: &'a Vec<String>,
-    pub arg_map: HashMap<&'a String, Option<&'a String>>,
+    pub arg_map: HashMap<&'a str, Option<&'a String>>,
     pub left_overs: Vec<&'a String>
 }
 
 impl<'a> CLParser<'a> {
     pub fn new(args: &'a Vec<String>) -> CLParser {
         let mut arg_map = HashMap::new();
-        let mut flag_opt: Option<&String> = None;
+        let mut flag_opt: Option<&str> = None;
+        let mut prev_flag_opt: Option<&str> = None;
+
         let mut left_overs: Vec<&String> = vec![];
 
         for arg in args.iter() {
-            if arg.find('-').is_some() {
+
+            flag_opt = Self::parse_flag(arg);
+            if let Some(flag_str) = flag_opt {
                 // Saw a flag (--flag)
-                if let Some(flag) = flag_opt {
-                    // Previous flag didn't have a parameter.
-                    arg_map.insert(flag, None);
-                }
-                flag_opt = Some(arg);
+                arg_map.insert(flag_str, None);
+                prev_flag_opt = flag_opt;
             } else {
                 // Saw a parameter or leftover
-                if let Some(flag) = flag_opt {
-                    arg_map.insert(flag, Some(arg));
-                    flag_opt = None;
+                if let Some(prev_flag) = prev_flag_opt {
+                    arg_map.insert(prev_flag, Some(arg));
                 } else {
                     left_overs.push(arg);
                 }
+                prev_flag_opt = None;
             }
         }
         CLParser { args, arg_map, left_overs }
+    }
+
+    fn parse_flag(flag: &String) -> Option<&str> {
+        if flag.find("-") == Some(0) {
+            if flag.find("--") == Some(0) {
+                Some(&flag[2..])
+            } else {
+                Some(&flag[1..])
+            }
+        } else {
+            None
+        }
     }
 
     pub fn parse_string(&self, _name: &str, retval: &mut Option<String>) -> &Self {
@@ -52,7 +65,7 @@ mod tests {
     fn it_works() {
         println!("Hello");
 
-        let args = vec!["--hello", "1", "--world", "-how", "--are", "1,4,5", "-you"];
+        let args = vec!["--hello", "1", "extra_param", "--world", "-how", "--are", "1,4,5", "-you", "another_extra_param"];
         let args = args.iter().map(|&e| e.to_owned()).collect::<Vec<String>>();
         let mut hello: Option<String> = None;
         let mut world: Option<String> = None;
@@ -65,5 +78,7 @@ mod tests {
             .parse_bool("how", &mut how);
 
         println!("arg hash map: {:?}", clp.arg_map);
+        println!("left_overs: {:?}", clp.left_overs);
+
     }
 }
