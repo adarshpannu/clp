@@ -64,37 +64,47 @@ impl<'a> CLParser<'a> {
         self
     }
 
-    pub fn parse(&mut self) {
+    pub fn parse(&mut self) -> Result<(), String> {
         let mut left_overs: Vec<&String> = vec![];
         let mut ix = 0;
-
-        println!("arg_spec_map {:?}", self.arg_spec_map);
 
         while ix < self.args.len() {
             let (arg, is_flag) = self.get_arg(ix);
             let (next_arg, is_next_flag) = self.get_arg(ix + 1);
 
-            println!("arg = {:?}, next_arg = {:?}", arg, next_arg);
             if is_flag {
                 // Have a flag ... check parameter
-                let arg_spec = self.arg_spec_map.get(arg.unwrap()).unwrap();
+                let arg = arg.unwrap();
+
+                let arg_spec = self.arg_spec_map.get(arg);
+                if arg_spec.is_none() {
+                    let err = format!("Invalid flag specified command line: {}.", arg);
+                    return Err(err);
+                }
+                let arg_spec = arg_spec.unwrap();
                 match arg_spec.1 {
                     ArgSpec::Never => {
                         if !is_next_flag {
-                            panic!("Flag {:?} must not have a parameter, {:?} found.", arg, next_arg);
+                            let err = format!(
+                                "Flag {:?} must not have a parameter, {:?} found.",
+                                arg, next_arg
+                            );
+                            return Err(err);
                         }
                     }
-                    ArgSpec::Optional => {
-                    }
+                    ArgSpec::Optional => {}
                     ArgSpec::Required => {
                         if is_next_flag {
-                            panic!("Flag {:?} needs to have a parameter, none found.", arg);
+                            let err =
+                                format!("Flag {:?} needs to have a parameter, none found.", arg);
+                            return Err(err);
                         }
                     }
                 }
             }
             ix += 1;
         }
+        return Ok(());
     }
 }
 
@@ -103,31 +113,60 @@ mod tests {
     use super::ArgSpec::*;
     use super::*;
 
+    fn split(args: &str) -> Vec<String> {
+        args.split(' ').into_iter().map(|e| e.to_owned()).collect()
+    }
+
+    #[test]
+    fn test_positive1() {
+        let args = tests::split("cmdname --hello");
+        let mut clpr = CLParser::new(&args);
+        clpr.define("--hello", ArgType(Required, Optional));
+
+        let retval = clpr.parse();
+        println!("retval: {:?}", retval);
+        assert!(retval.is_ok());
+    }
+
+    #[test]
+    fn test_negative1() {
+        let args = tests::split("cmdname --hello --world");
+        let mut clpr = CLParser::new(&args);
+        clpr.define("--hello", ArgType(Optional, Required))
+            .define("--world", ArgType(Optional, Optional));
+
+        let retval = clpr.parse();
+        println!("retval: {:?}", retval);
+        assert!(retval.is_err());
+    }
+
+    #[test]
+    fn test_negative2() {
+        let args = tests::split("cmdname --hello world");
+        let mut clpr = CLParser::new(&args);
+        clpr.define("--hello", ArgType(Optional, Never))
+            .define("--world", ArgType(Optional, Never));
+
+        let retval = clpr.parse();
+        println!("retval: {:?}", retval);
+        assert!(retval.is_err());
+    }
+
     #[test]
     fn it_works() {
         println!("------------------");
-        let args = vec![
-            "--hello",
-            "1",
-            "extra_param",
-            "--world",
-            "wuld param",
-            "-how",
-            "--are",
-            "-you",
-            "another_extra_param",
-        ];
-        let args = args.iter().map(|&e| e.to_owned()).collect::<Vec<String>>();
 
+        let args = tests::split(
+            "--hello 1 extra_param --world wuldparam -how --are -you another_extra_param",
+        );
         let mut clpr = CLParser::new(&args);
 
         clpr.define("--hello", ArgType(Required, Optional))
             .define("--world", ArgType(Required, Required))
             .define("--how", ArgType(Required, Optional))
             .define("--are", ArgType(Required, Never))
-            .define("--you", ArgType(Required, Optional))
-            .parse();
+            .define("--you", ArgType(Required, Optional));
 
-        println!("arg hash map: {:?}", clpr.arg_spec_map);
+        assert!(clpr.parse().is_ok());
     }
 }
