@@ -108,7 +108,7 @@ impl<'a> CLParser<'a> {
             }
             ix += 1;
         }
-        //self.arg_found_map = arg_found_map;
+        self.arg_found_map = arg_found_map;
         return Ok(());
     }
 }
