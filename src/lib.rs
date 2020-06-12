@@ -22,7 +22,7 @@ pub struct CLParser<'a> {
 }
 
 impl<'a> CLParser<'a> {
-    pub fn new(args: &'a Vec<String>) -> CLParser {
+    pub fn new(args: &Vec<String>) -> CLParser {
         let arg_spec_map = HashMap::new();
         let arg_found_map = HashMap::new();
         CLParser {
@@ -64,9 +64,10 @@ impl<'a> CLParser<'a> {
         self
     }
 
-    pub fn parse(&mut self) -> Result<(), String> {
+    pub fn parse(&'a mut self) -> Result<(), String> {
         let mut left_overs: Vec<&String> = vec![];
         let mut ix = 0;
+        let mut arg_found_map = HashMap::new();
 
         while ix < self.args.len() {
             let (arg, is_flag) = self.get_arg(ix);
@@ -94,16 +95,20 @@ impl<'a> CLParser<'a> {
                     }
                     ArgSpec::Optional => {}
                     ArgSpec::Required => {
-                        if is_next_flag {
+                        if is_next_flag || next_arg == None {
                             let err =
                                 format!("Flag {:?} needs to have a parameter, none found.", arg);
                             return Err(err);
                         }
                     }
                 }
+                if next_arg != None {
+                    arg_found_map.insert(arg, next_arg.unwrap());
+                }
             }
             ix += 1;
         }
+        //self.arg_found_map = arg_found_map;
         return Ok(());
     }
 }
@@ -112,6 +117,26 @@ impl<'a> CLParser<'a> {
 mod tests {
     use super::ArgSpec::*;
     use super::*;
+
+    #[test]
+    fn test_all_positive() {
+        println!("------------------");
+
+        let args = tests::split(
+            "--hello 1 extra_param --world wuldparam -how --are -you another_extra_param",
+        );
+        let mut clpr = CLParser::new(&args);
+
+        clpr.define("--hello", ArgType(Required, Optional))
+            .define("--world", ArgType(Required, Required))
+            .define("--how", ArgType(Required, Optional))
+            .define("--are", ArgType(Required, Never))
+            .define("--you", ArgType(Required, Optional));
+
+        println!("arg_found_map = {:?}", clpr.arg_found_map);
+        assert!(clpr.parse().is_ok());
+
+    }
 
     fn split(args: &str) -> Vec<String> {
         args.split(' ').into_iter().map(|e| e.to_owned()).collect()
@@ -152,21 +177,35 @@ mod tests {
         assert!(retval.is_err());
     }
 
+
     #[test]
-    fn it_works() {
-        println!("------------------");
+    fn tokenize() {
+        let mut str = "[--hello [int]]".to_owned();
 
-        let args = tests::split(
-            "--hello 1 extra_param --world wuldparam -how --are -you another_extra_param",
-        );
-        let mut clpr = CLParser::new(&args);
+        let replacements = ["[", "]", "-", "|"];
+        for &fromstr in replacements.iter() {
+            let tostr = format!(" {} ", fromstr);
+            str = str.replace(fromstr, &tostr);
+        }
 
-        clpr.define("--hello", ArgType(Required, Optional))
-            .define("--world", ArgType(Required, Required))
-            .define("--how", ArgType(Required, Optional))
-            .define("--are", ArgType(Required, Never))
-            .define("--you", ArgType(Required, Optional));
+        let tokens = str.split(' ').map(|e| e.trim()).filter(|&e| e.len() > 0);
 
-        assert!(clpr.parse().is_ok());
+        let mut stack: Vec<&str> = vec![];
+        for token in tokens {
+            match token {
+                " " => {}
+                "-" => {
+                    if stack.last() == Some(&"-") {
+                    } else {
+                        stack.push(token)
+                    }
+                }
+                _ => stack.push(token),
+            }
+        }
+
+        for token in stack {
+            print!("{} ", token);
+        }
     }
 }
