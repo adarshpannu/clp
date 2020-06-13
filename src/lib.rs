@@ -44,9 +44,9 @@ impl<'a> CLParser<'a> {
         }
     }
 
-    fn get_arg(&self, ix: usize) -> (Option<&str>, bool) {
-        if ix < self.args.len() {
-            let arg = &self.args[ix];
+    fn get_arg(self_args: &Vec<String>, ix: usize) -> (Option<&str>, bool) {
+        if ix < self_args.len() {
+            let arg = &self_args[ix];
             let (flag, is_flag) = Self::trim_dashes(arg);
             (Some(flag), is_flag)
         } else {
@@ -70,12 +70,13 @@ impl<'a> CLParser<'a> {
         let mut arg_found_map = HashMap::new();
 
         while ix < self.args.len() {
-            let (arg, is_flag) = self.get_arg(ix);
-            let (next_arg, is_next_flag) = self.get_arg(ix + 1);
+            let (arg, is_flag) = Self::get_arg(&self.args, ix);
+            let (next_arg, is_next_flag) = Self::get_arg(&self.args, ix + 1);
+
+            let arg = arg.unwrap();
 
             if is_flag {
                 // Have a flag ... check parameter
-                let arg = arg.unwrap();
 
                 let arg_spec = self.arg_spec_map.get(arg);
                 if arg_spec.is_none() {
@@ -103,12 +104,14 @@ impl<'a> CLParser<'a> {
                     }
                 }
                 if next_arg != None {
+                    println!(">>> Insert {:?}->{:?}", arg, next_arg.unwrap());
                     arg_found_map.insert(arg, next_arg.unwrap());
                 }
             }
             ix += 1;
         }
         self.arg_found_map = arg_found_map;
+        println!("arg_found_map = {:?}", self.arg_found_map);
         return Ok(());
     }
 }
@@ -133,7 +136,6 @@ mod tests {
             .define("--are", ArgType(Required, Never))
             .define("--you", ArgType(Required, Optional));
 
-        println!("arg_found_map = {:?}", clpr.arg_found_map);
         assert!(clpr.parse().is_ok());
 
     }
