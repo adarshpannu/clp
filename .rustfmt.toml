@@ -1,0 +1,6 @@
+# Rustfmt configuration
+# https://github.com/rust-lang/rustfmt/blob/master/Configurations.md
+
+edition = "2018"
+tab_spaces = 4
+fn_args_layout = "Compressed"
