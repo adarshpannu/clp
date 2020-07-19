@@ -9,7 +9,7 @@ pub enum ArgSpec {
 }
 
 #[derive(Debug)]
-pub struct ArgType(ArgSpec, ArgSpec);
+pub struct ArgType(pub ArgSpec, pub ArgSpec);
 
 pub struct CLParser<'a> {
     args: &'a Vec<String>,
