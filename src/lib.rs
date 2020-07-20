@@ -4,14 +4,14 @@ use regex::Regex;
 use std::collections::HashMap;
 
 #[derive(Debug, Copy, Clone)]
-pub enum ArgSpec {
+enum ArgSpec {
     Never,    // 0
     Optional, // 0 or 1
     Required, // 1
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct ArgType(pub ArgSpec, pub ArgSpec);
+struct ArgType(ArgSpec, ArgSpec);
 
 pub struct CLParser<'a> {
     args: &'a Vec<String>,
