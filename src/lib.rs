@@ -139,7 +139,7 @@ impl<'a> CLParser<'a> {
     }
 
     #[allow(dead_code)]
-    fn get(&mut self, key: &str) -> Option<&str> {
+    pub fn get(&mut self, key: &str) -> Option<&str> {
         *self.arg_found_map.get(key).unwrap()
     }
 }
