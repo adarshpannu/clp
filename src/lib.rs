@@ -1,6 +1,5 @@
 // clp: simple command-line parser
 use regex::Regex;
-
 use std::collections::HashMap;
 
 #[derive(Debug, Copy, Clone)]
@@ -18,7 +17,7 @@ pub struct CLParser<'a> {
     arg_spec_map: HashMap<&'a str, ArgType>,
     arg_found_map: HashMap<&'a str, Option<&'a str>>,
     pub left_overs: Vec<&'a str>,
-    re: Regex,
+    flag_regex: Regex,
 }
 
 impl<'a> CLParser<'a> {
@@ -26,14 +25,14 @@ impl<'a> CLParser<'a> {
         let arg_spec_map = HashMap::new();
         let arg_found_map = HashMap::new();
         let left_overs = vec![];
-        let re = Regex::new(r"^--(\w+)\s*(\[)?(\w+)?(\])?$").unwrap();
+        let flag_regex = Regex::new(r"^--(\w+)\s*(\[)?(\w+)?(\])?$").unwrap();
 
         CLParser {
             args,
             arg_spec_map,
             arg_found_map,
             left_overs,
-            re,
+            flag_regex,
         }
     }
 
@@ -54,7 +53,7 @@ impl<'a> CLParser<'a> {
 
     pub fn define(&mut self, arg: &'a str) -> &mut Self {
         let err_msg = format!("Illegal flag specification: {}", arg);
-        let cap = self.re.captures(arg);
+        let cap = self.flag_regex.captures(arg);
         if let Some(cap) = cap {
             // 1:flag 2:[ 3:type 4:]
             let arg_spec = match (cap.get(2), cap.get(3), cap.get(4)) {
@@ -83,29 +82,29 @@ impl<'a> CLParser<'a> {
             if is_flag {
                 // Have a flag ... check parameter
                 let arg_spec = self.arg_spec_map.get(arg);
-                if arg_spec.is_none() {
+                if let Some(arg_spec) = arg_spec {
+                    match arg_spec.1 {
+                        ArgSpec::Never => {
+                            if next_arg.is_some() && !is_next_flag {
+                                return Err(format!(
+                                    "Flag {:?} must not have a parameter, {:?} found.",
+                                    arg,
+                                    next_arg.unwrap()
+                                ));
+                            }
+                        }
+                        ArgSpec::Optional => {}
+                        ArgSpec::Required => {
+                            if is_next_flag || next_arg == None {
+                                return Err(format!(
+                                    "Flag {:?} needs to have a parameter, none found.",
+                                    arg
+                                ));
+                            }
+                        }
+                    }
+                } else {
                     return Err(format!("Invalid flag specified: {}.", arg));
-                }
-                let arg_spec = arg_spec.unwrap();
-                match arg_spec.1 {
-                    ArgSpec::Never => {
-                        if next_arg.is_some() && !is_next_flag {
-                            return Err(format!(
-                                "Flag {:?} must not have a parameter, {:?} found.",
-                                arg,
-                                next_arg.unwrap()
-                            ));
-                        }
-                    }
-                    ArgSpec::Optional => {}
-                    ArgSpec::Required => {
-                        if is_next_flag || next_arg == None {
-                            return Err(format!(
-                                "Flag {:?} needs to have a parameter, none found.",
-                                arg
-                            ));
-                        }
-                    }
                 }
                 // Ensure that we haven't already inserted this flag
                 if self.arg_found_map.get(arg) != None {
