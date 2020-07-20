@@ -60,7 +60,7 @@ impl<'a> CLParser<'a> {
             let arg_spec = match (cap.get(2), cap.get(3), cap.get(4)) {
                 (None, None, None) => ArgSpec::Never,             // "flag"
                 (Some(_), Some(_), Some(_)) => ArgSpec::Optional, // "flag [ type ]"
-                (None, Some(_), None) => ArgSpec::Required,       // "flag [ type ]"
+                (None, Some(_), None) => ArgSpec::Required,       // "flag type"
                 _ => panic!("{}", err_msg),
             };
             let flag = cap.get(1).unwrap().as_str();
@@ -167,8 +167,7 @@ mod tests {
     fn test_negative_missing_param1() {
         let args = tests::split("cmdname --hello hello --world");
         let mut clpr = CLParser::new(&args);
-        clpr.define("--hello param")
-            .define("--world param");
+        clpr.define("--hello param").define("--world param");
 
         let retval = clpr.parse();
         println!("retval: {:?}", retval);
@@ -179,8 +178,7 @@ mod tests {
     fn test_negative_missing_param2() {
         let args = tests::split("cmdname --hello --world");
         let mut clpr = CLParser::new(&args);
-        clpr.define("--hello param")
-            .define("--world param");
+        clpr.define("--hello param").define("--world param");
 
         let retval = clpr.parse();
         println!("retval: {:?}", retval);
@@ -191,8 +189,7 @@ mod tests {
     fn test_negative_unwanted_param() {
         let args = tests::split("cmdname --hello world");
         let mut clpr = CLParser::new(&args);
-        clpr.define("--hello")
-            .define("--world");
+        clpr.define("--hello").define("--world");
 
         let retval = clpr.parse();
         println!("retval: {:?}", retval);
@@ -203,8 +200,7 @@ mod tests {
     fn test_negative_repeated_flag() {
         let args = tests::split("cmdname --hello 1 --hello 2 --world 3");
         let mut clpr = CLParser::new(&args);
-        clpr.define("--hello [param]")
-            .define("--world [param]");
+        clpr.define("--hello [param]").define("--world [param]");
 
         let retval = clpr.parse();
         println!("retval: {:?}", retval);
