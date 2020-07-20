@@ -1,14 +1,16 @@
 // clp: simple command-line parser
+use regex::Regex;
+
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum ArgSpec {
     Never,    // 0
     Optional, // 0 or 1
     Required, // 1
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct ArgType(pub ArgSpec, pub ArgSpec);
 
 pub struct CLParser<'a> {
@@ -16,6 +18,7 @@ pub struct CLParser<'a> {
     arg_spec_map: HashMap<&'a str, ArgType>,
     arg_found_map: HashMap<&'a str, Option<&'a str>>,
     pub left_overs: Vec<&'a str>,
+    re: Regex,
 }
 
 impl<'a> CLParser<'a> {
@@ -23,11 +26,14 @@ impl<'a> CLParser<'a> {
         let arg_spec_map = HashMap::new();
         let arg_found_map = HashMap::new();
         let left_overs = vec![];
+        let re = Regex::new(r"^--(\w+)\s*(\[)?(\w+)?(\])?$").unwrap();
+
         CLParser {
             args,
             arg_spec_map,
             arg_found_map,
             left_overs,
+            re,
         }
     }
 
@@ -46,14 +52,24 @@ impl<'a> CLParser<'a> {
         }
     }
 
-    pub fn define(&mut self, arg: &'a str, arg_type: ArgType) -> &mut Self {
-        let (flag, is_flag) = Self::trim_dashes(arg);
-        if is_flag {
-            self.arg_spec_map.insert(flag, arg_type);
+    pub fn define(&mut self, arg: &'a str) -> &mut Self {
+        let err_msg = format!("Illegal flag specification: {}", arg);
+        let cap = self.re.captures(arg);
+        if let Some(cap) = cap {
+            // 1:flag 2:[ 3:type 4:]
+            let arg_spec = match (cap.get(2), cap.get(3), cap.get(4)) {
+                (None, None, None) => ArgSpec::Never,             // "flag"
+                (Some(_), Some(_), Some(_)) => ArgSpec::Optional, // "flag [ type ]"
+                (None, Some(_), None) => ArgSpec::Required,       // "flag [ type ]"
+                _ => panic!("{}", err_msg),
+            };
+            let flag = cap.get(1).unwrap().as_str();
+            let arg_spec = ArgType(ArgSpec::Required, arg_spec);
+            self.arg_spec_map.insert(flag, arg_spec);
+            self
         } else {
-            panic!("Illegal flag specification: {}", arg);
+            panic!("{}", err_msg)
         }
-        self
     }
 
     pub fn parse(&mut self) -> Result<(), String> {
@@ -73,7 +89,7 @@ impl<'a> CLParser<'a> {
                 let arg_spec = arg_spec.unwrap();
                 match arg_spec.1 {
                     ArgSpec::Never => {
-                        if !is_next_flag {
+                        if next_arg.is_some() && !is_next_flag {
                             return Err(format!(
                                 "Flag {:?} must not have a parameter, {:?} found.",
                                 arg,
@@ -130,11 +146,69 @@ impl<'a> CLParser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::ArgSpec::*;
     use super::*;
 
     fn split(args: &str) -> Vec<String> {
         args.split(' ').into_iter().map(|e| e.to_owned()).collect()
+    }
+
+    #[test]
+    fn test_negative_bad_flag() {
+        let args = tests::split("cmdname --hell --wuld");
+        let mut clpr = CLParser::new(&args);
+        clpr.define("--hello param").define("--world param");
+
+        let retval = clpr.parse();
+        println!("retval: {:?}", retval);
+        assert!(retval.is_err());
+    }
+
+    #[test]
+    fn test_negative_missing_param1() {
+        let args = tests::split("cmdname --hello hello --world");
+        let mut clpr = CLParser::new(&args);
+        clpr.define("--hello param")
+            .define("--world param");
+
+        let retval = clpr.parse();
+        println!("retval: {:?}", retval);
+        assert!(retval.is_err());
+    }
+
+    #[test]
+    fn test_negative_missing_param2() {
+        let args = tests::split("cmdname --hello --world");
+        let mut clpr = CLParser::new(&args);
+        clpr.define("--hello param")
+            .define("--world param");
+
+        let retval = clpr.parse();
+        println!("retval: {:?}", retval);
+        assert!(retval.is_err());
+    }
+
+    #[test]
+    fn test_negative_unwanted_param() {
+        let args = tests::split("cmdname --hello world");
+        let mut clpr = CLParser::new(&args);
+        clpr.define("--hello")
+            .define("--world");
+
+        let retval = clpr.parse();
+        println!("retval: {:?}", retval);
+        assert!(retval.is_err());
+    }
+
+    #[test]
+    fn test_negative_repeated_flag() {
+        let args = tests::split("cmdname --hello 1 --hello 2 --world 3");
+        let mut clpr = CLParser::new(&args);
+        clpr.define("--hello [param]")
+            .define("--world [param]");
+
+        let retval = clpr.parse();
+        println!("retval: {:?}", retval);
+        assert!(retval.is_err());
     }
 
     #[test]
@@ -144,11 +218,11 @@ mod tests {
         );
         let mut clpr = CLParser::new(&args);
 
-        clpr.define("--hello", ArgType(Required, Optional))
-            .define("--world", ArgType(Required, Required))
-            .define("--how", ArgType(Required, Optional))
-            .define("--are", ArgType(Required, Never))
-            .define("--you", ArgType(Required, Optional));
+        clpr.define("--hello [param]")
+            .define("--world param")
+            .define("--how [param]")
+            .define("--are")
+            .define("--you [param]");
 
         let retval = clpr.parse();
         clpr.get("hello");
@@ -164,69 +238,9 @@ mod tests {
     fn test_positive1() {
         let args = tests::split("cmdname --hello");
         let mut clpr = CLParser::new(&args);
-        clpr.define("--hello", ArgType(Required, Optional));
+        clpr.define("--hello");
 
         let retval = clpr.parse();
         assert!(retval.is_ok());
-    }
-
-    #[test]
-    fn test_negative_bad_flag() {
-        let args = tests::split("cmdname --hell --wuld");
-        let mut clpr = CLParser::new(&args);
-        clpr.define("--hello", ArgType(Optional, Required))
-            .define("--world", ArgType(Optional, Required));
-
-        let retval = clpr.parse();
-        println!("retval: {:?}", retval);
-        assert!(retval.is_err());
-    }
-
-    #[test]
-    fn test_negative_missing_param1() {
-        let args = tests::split("cmdname --hello hello --world");
-        let mut clpr = CLParser::new(&args);
-        clpr.define("--hello", ArgType(Optional, Required))
-            .define("--world", ArgType(Optional, Required));
-
-        let retval = clpr.parse();
-        println!("retval: {:?}", retval);
-        assert!(retval.is_err());
-    }
-
-    #[test]
-    fn test_negative_missing_param2() {
-        let args = tests::split("cmdname --hello --world");
-        let mut clpr = CLParser::new(&args);
-        clpr.define("--hello", ArgType(Optional, Required))
-            .define("--world", ArgType(Optional, Required));
-
-        let retval = clpr.parse();
-        println!("retval: {:?}", retval);
-        assert!(retval.is_err());
-    }
-
-    #[test]
-    fn test_negative_unwanted_param() {
-        let args = tests::split("cmdname --hello world");
-        let mut clpr = CLParser::new(&args);
-        clpr.define("--hello", ArgType(Optional, Never))
-            .define("--world", ArgType(Optional, Never));
-
-        let retval = clpr.parse();
-        println!("retval: {:?}", retval);
-        assert!(retval.is_err());
-    }
-
-    #[test]
-    fn test_negative_repeated_flag() {
-        let args = tests::split("cmdname --hello 1 --hello 2 --world 3");
-        let mut clpr = CLParser::new(&args);
-        clpr.define("--hello", ArgType(Optional, Optional))
-            .define("--world", ArgType(Optional, Optional));
-
-        let retval = clpr.parse();
-        println!("retval: {:?}", retval);
-        assert!(retval.is_err());
     }
 }
