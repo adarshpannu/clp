@@ -52,6 +52,7 @@ impl<'a> CLParser<'a> {
         }
     }
 
+    
     pub fn define(&mut self, arg: &'a str) -> &mut Self {
         let err_msg = format!("Illegal flag specification: {}", arg);
         let cap = self.flag_regex.captures(arg);
